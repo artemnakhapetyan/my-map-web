@@ -1,5 +1,40 @@
 myMapApp.factory('mapService', function ($http, $mdDialog, $location, mapUtils) {
     return {
+        
+        _zoomIn: function () {
+            this.map.zoomIn();
+        },
+        
+        _zoomOut: function () {
+            this.map.zoomOut();
+        },
+        
+        _location: function () {
+          
+            var me = this;
+            if (navigator.geolocation) {
+                navigator.geolocation.getCurrentPosition(function (position) {
+                    var center = new OpenLayers.Geometry.Point(position.coords.longitude, position.coords.latitude);
+                    //var center = me.ePSG4326toGoogleMercator(position.coords.longitude, position.coords.latitude);
+                    center = mapUtils.convertGeometrySrid(center, 'EPSG:4326', 'EPSG:900913');
+                    var lonLatCenter = new OpenLayers.LonLat(center.x, center.y);
+                    me.map.setCenter(lonLatCenter, 15);
+                    /*var locationMarker = me.createIconMarker(center, 'resources/imgs/icons/location.png?v1', {
+                        type: 'LOCATION_MARKER',
+                        callback: function (ctrl, feature) {
+                            var markerPoint = me.googleMercatorToEPSG4326(feature.geometry);
+                            //alert('x='+parseFloat(markerPoint.x).toFixed(5)+'   y='+parseFloat(markerPoint.y).toFixed(5));
+                            AppUtils.messagebox('კოორდინატები', parseFloat(markerPoint.x).toFixed(5) + '   ' + parseFloat(markerPoint.y).toFixed(5))
+                        }
+                    });
+                    me.drawingLayer.addFeatures(locationMarker);*/
+                });
+            } else {
+                alert('თქვენს ბრაუზერს არ აქვს მდებარეობის სერვისის მხარდაჭერა');
+            }
+            
+        },
+        
         _initMap: function ($scope) {
 
             var me = this;
