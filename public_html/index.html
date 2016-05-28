@@ -2,23 +2,23 @@
 <head>
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <!-- Angular Material style sheet -->
-  <link rel="stylesheet" href="bower_components/angular-material/angular-material.min.css">
+  <link rel="stylesheet" href="resources/bower_components/angular-material/angular-material.min.css">
   
   <!-- js utils -->
-  <script src="utils/StringUtils.js"></script>
+  <script src="appjs/utils/StringUtils.js"></script>
     
   <!-- Angular Material requires Angular.js Libraries -->
-  <script src="bower_components/angular/angular.min.js"></script>
-  <script src="bower_components/angular-ui-router/release/angular-ui-router.min.js"></script>
-  <script src="bower_components/angular-animate/angular-animate.min.js"></script>
-  <script src="bower_components/angular-aria/angular-aria.min.js"></script>
-  <script src="bower_components/angular-messages/angular-messages.min.js"></script>
+  <script src="resources/bower_components/angular/angular.min.js"></script>
+  <script src="resources/bower_components/angular-ui-router/release/angular-ui-router.min.js"></script>
+  <script src="resources/bower_components/angular-animate/angular-animate.min.js"></script>
+  <script src="resources/bower_components/angular-aria/angular-aria.min.js"></script>
+  <script src="resources/bower_components/angular-messages/angular-messages.min.js"></script>
 
   <!-- Angular Material Library -->
-  <script src="bower_components/angular-material/angular-material.min.js"></script>
+  <script src="resources/bower_components/angular-material/angular-material.min.js"></script>
   
   <!-- OL2 -->
-  <script src="bower_components/ol2-bower/OpenLayers.js"></script>
+  <script src="resources/bower_components/ol2-bower/OpenLayers.js"></script>
   
   <!-- Application bootstrap  -->
   <script type="text/javascript">    
@@ -26,13 +26,13 @@
   </script>
   
   <!-- Angular Services -->
-  <script src="services/MapUtils.js"></script>
-  <script src="services/MapService.js?v1"></script>
+  <script src="appjs/services/MapUtils.js"></script>
+  <script src="appjs/services/MapService.js?v1"></script>
   
   <!-- Angular Controllers -->
-  <script src="controllers/TestController.js"></script>
-  <script src="controllers/MapController.js"></script>
-  <script src="controllers/AppController.js"></script>
+  <script src="appjs/controllers/TestController.js"></script>
+  <script src="appjs/controllers/MapController.js"></script>
+  <script src="appjs/controllers/AppController.js"></script>
   
   <script type="text/javascript">
     /*myMapApp.config(function($routeProvider) {
@@ -54,7 +54,7 @@
         //$urlRouterProvider.otherwise('/');
 
         $stateProvider.state('map', {
-            url:'/',
+            //url:'/',
             templateUrl: 'pages/map.html',
             controller: 'mapController'
         });
