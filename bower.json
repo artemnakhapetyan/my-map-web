@@ -13,7 +13,10 @@
         "angular-aria": "^1.4.8",
         "angular-messages": "^1.4.8",
         "angular-material": "^1.1",
-        "ol2-bower": "2.13.1"
+        "angular-sanitize": "^1.4.8",
+        "ol2-bower": "2.13.1",
+        "moment": "^2.9.0",
+        "ng-file-upload": "^12.2.5"
     },
     "devDependencies": {
     }

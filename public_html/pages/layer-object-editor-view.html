@@ -1,0 +1,136 @@
+<md-content layout="column" layout-fill >
+
+    
+
+    <md-toolbar class="ux-low-toolbar md-primary md-hue-1">
+        <div class="md-toolbar-tools">
+            <span flex></span>
+            <span class="bpg-mrgvlovani-caps">&nbsp;{{layerData.name}}</span>
+            <span flex></span>
+        </div>
+        <md-button ng-click="closeSidenavView('layer-object-editor');" class="my-fab-bottom-left md-fab md-accent md-fab-bottom-left md-mini" aria-label="input">
+                <md-icon md-font-set="material-icons" class="ng-scope ng-isolate-scope material-icons">close</md-icon>
+            </md-button>
+    </md-toolbar>
+
+
+
+
+    <md-content layout="column" flex layout-padding>
+        
+        
+        
+        <div>
+            <form name="createLetterForm" ng-submit="saveLayerObject($event)">
+                
+                <section ng-if="formMode==='edit'" style="border-bottom: 2px solid rgb(69,90,100);padding-bottom: 10px;">
+                    
+                    
+                    <br/>
+                    <table>
+                        <tr ng-if="layerObject['FEATURE_PHOTOES'].length" style="text-align: center; background-color: #efefef;"
+                                ng-repeat="featurePhoto in layerObject['FEATURE_PHOTOES']">
+                            <td>
+                                <a style="cursor: pointer;" 
+                                     target="_blank"
+                                     ng-href="{{'../LayersController/downloadPicture.do?fileId={0}'.format(featurePhoto.objVal)}}">
+                                    <img style="height: 100px; margin: 5px; cursor: pointer;" 
+                                         ng-click="showLayerObjectImages()"
+                                         ng-src="{{'../LayersController/downloadPicture.do?fileId={0}'.format(featurePhoto.objVal)}}"/>
+                                </a>
+                            </td>
+                            <td>
+                                <md-button ng-click="deleteFeatureObj(featurePhoto);" class="md-warn md-mini" aria-label="input" style="float: right;">
+                                    <md-icon md-font-set="material-icons" class="ng-scope ng-isolate-scope material-icons">delete</md-icon>
+                                </md-button>
+                            </td>
+                        </tr>
+                    </table>
+                    <md-button ng-model="letters.selectedLetter.file4Upload"  
+                               class="md-fab md-raised md-warn md-mini" 
+                               ngf-select="uploadPhoto($file)">
+                        <md-icon md-font-set="material-icons" class="ng-scope ng-isolate-scope material-icons">
+                            add
+                        </md-icon>
+                    </md-button>
+                    <span class="bpg-mrgvlovani-caps" style="font-weight: bold;">სურათები</span>
+                    
+                    
+                </section>
+                
+                <section ng-if="formMode==='edit'" style="border-bottom: 2px solid rgb(69,90,100);padding-bottom: 10px;">
+                    
+                    
+                    <br/>
+                    <table>
+                        <tr ng-if="layerObject['FEATURE_DOCUMENTS'].length" style="text-align: center; background-color: #efefef;"
+                                ng-repeat="featureDocument in layerObject['FEATURE_DOCUMENTS']">
+                            <td>
+                                <a style="cursor: pointer;" 
+                                     target="_blank"
+                                     ng-href="{{'../LayersController/downloadPicture.do?fileId={0}'.format(featureDocument.objVal)}}">{{featureDocument.fName}}</a>
+                            </td>
+                            <td>
+                                <md-button ng-click="deleteFeatureObj(featureDocument);" class="md-warn md-mini" aria-label="input" style="float: right;">
+                                    <md-icon md-font-set="material-icons" class="ng-scope ng-isolate-scope material-icons">delete</md-icon>
+                                </md-button>
+                            </td>
+                        </tr>
+                    </table>
+                    
+                    <md-button 
+                               class="md-fab md-raised md-warn md-mini" 
+                               ngf-select="uploadDocument($file)">
+                        <md-icon md-font-set="material-icons" class="ng-scope ng-isolate-scope material-icons">
+                            add
+                        </md-icon>
+                    </md-button>
+                    <span class="bpg-mrgvlovani-caps" style="font-weight: bold;">დოკუმენტები</span>
+                    
+                </section>
+
+                <md-input-container ng-repeat="field in layerObjectFields" ng-if="field.isOn" ng-class="(field.dataType===64)? 'md-icon-float md-icon-left md-block': 'md-block' ">
+                    <label ng-if="field.dataType !== 62">{{field.columnTitle}}</label>
+
+                    <md-select ng-if="field.dataType === 61" name="{{field.columnName}}" ng-model="layerObject[field.columnName]" ng-change="comboChange(layerObject[field.columnName], field.libType);">
+                        <md-option ng-repeat="record in libs[field.libType]" ng-if="!record.parentObjId || (record.parentObjId && record.parentObjChoosed)" ng-value="record.objId" class="ux-md-option-wrap-normal">
+                            {{record.objName}}
+                        </md-option>
+                    </md-select>
+                    <div class="md-errors-spacer" ng-if="field.dataType === 61"></div>
+                    
+                    <input ng-if="field.dataType === 62" ng-model="layerObject[field.columnName]" type="hidden">
+
+                    <input ng-if="field.dataType === 59" ng-model="layerObject[field.columnName]" type="text">
+
+                    <input ng-if="field.dataType === 60" ng-model="layerObject[field.columnName]" type="number">
+
+                    <md-datepicker ng-if="field.dataType === 63" class="my-date-picker" ng-model="layerObject[field.columnName]" >
+                    </md-datepicker>
+
+
+                    <md-icon ng-if="field.dataType === 64" md-font-set="material-icons" class="ng-scope ng-isolate-scope material-icons md-primary" 
+                             style="cursor: pointer"
+                             ng-click="chooseCoordinates(field.columnName);">location_on
+                    </md-icon>
+                    <textarea id="layer-object-geometry-id-{{field.columnName}}" 
+                              ng-if="field.dataType === 64" 
+                              ng-model="layerObject[field.columnName]" 
+                              ng-click="chooseCoordinates(field.columnName);"
+                              required ng-readonly="true"></textarea>
+                    
+                </md-input-container>
+
+                <section layout="row" layout-sm="column" layout-align="center center" layout-wrap>
+                    
+                    <!--<md-button class="md-raised md-warn" ng-click="fillFormWithValuesTemp();">შევსება</md-button>-->
+                    <md-button class="md-raised" ng-click="resetForm();">გასუფთავება</md-button>
+                    <md-button type="submit" class="md-raised md-primary" ng-disabled="createLetterForm.$invalid">შენახვა</md-button>
+                </section>
+
+            </form>
+
+        </div>
+    </md-content>
+
+</md-content>

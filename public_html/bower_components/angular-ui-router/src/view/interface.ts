@@ -1,6 +1,6 @@
 /** @module view */ /** for typedoc */
 import {_ViewDeclaration} from "../state/interface";
-import {Node} from "../path/node";
+import {PathNode} from "../path/node";
 
 /**
  * The context ref can be anything that has a `name` and a `parent` reference to another IContextRef
@@ -29,7 +29,7 @@ export interface ActiveUIView {
 }
 
 /**
- * This interface represents a [[ViewDeclaration]] that is bound to a [[Node]].
+ * This interface represents a [[ViewDeclaration]] that is bound to a [[PathNode]].
  *
  * A `ViewConfig` is the runtime definition of a single view.
  *
@@ -42,11 +42,13 @@ export interface ActiveUIView {
  * the `uiViewName` address.
  */
 export interface ViewConfig {
+  /* The unique id for the ViewConfig instance */
+  $id: number;
   /** The normalized view declaration from [[State.views]] */
   viewDecl: _ViewDeclaration;
 
   /** The node the ViewConfig is bound to */
-  node: Node;
+  path: PathNode[];
 
   /** Fetches templates, runs dynamic (controller|template)Provider code, lazy loads Components, etc */
   load(): Promise<ViewConfig>;

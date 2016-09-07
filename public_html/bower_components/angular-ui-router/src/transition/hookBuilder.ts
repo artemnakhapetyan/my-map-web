@@ -1,13 +1,16 @@
 /** @module transition */ /** for typedoc */
 
-import {IInjectable, extend, tail, assertPredicate, unnestR, flatten, identity} from "../common/common";
+import {extend, tail, assertPredicate, unnestR, identity} from "../common/common";
 import {isArray} from "../common/predicates";
 
-import {TransitionOptions, TransitionHookOptions, IHookRegistry, TreeChanges, IEventHook, ITransitionService, IMatchingNodes} from "./interface";
+import {TransitionOptions, TransitionHookOptions, IHookRegistry, TreeChanges, IEventHook, IMatchingNodes} from "./interface";
 
-import {Transition, TransitionHook} from "./module";
-import {State} from "../state/module";
-import {Node} from "../path/module";
+import {Transition} from "./transition";
+import {TransitionHook} from "./transitionHook";
+import {State} from "../state/stateObject";
+import {PathNode} from "../path/node";
+import {TransitionService} from "./transitionService";
+import {ResolveContext} from "../resolve/resolveContext";
 
 /**
  * This class returns applicable TransitionHooks for a specific Transition instance.
@@ -31,25 +34,21 @@ export class HookBuilder {
   toState: State;
   fromState: State;
 
-  constructor(private $transitions: ITransitionService, private transition: Transition, private baseHookOptions: TransitionHookOptions) {
+  constructor(private $transitions: TransitionService, private transition: Transition, private baseHookOptions: TransitionHookOptions) {
     this.treeChanges        = transition.treeChanges();
     this.toState            = tail(this.treeChanges.to).state;
     this.fromState          = tail(this.treeChanges.from).state;
     this.transitionOptions  = transition.options();
   }
 
-  // TODO: These get* methods are returning different cardinalities of hooks
-  // onBefore/onStart/onFinish/onSuccess/onError returns an array of hooks
-  // onExit/onRetain/onEnter returns an array of arrays of hooks
-
-  getOnBeforeHooks  = () => this._buildNodeHooks("onBefore",  "to",       tupleSort(), undefined, { async: false });
+  getOnBeforeHooks  = () => this._buildNodeHooks("onBefore",  "to",       tupleSort(), { async: false });
   getOnStartHooks   = () => this._buildNodeHooks("onStart",   "to",       tupleSort());
-  getOnExitHooks    = () => this._buildNodeHooks("onExit",    "exiting",  tupleSort(true), (node) => ({ $state$: node.state }));
-  getOnRetainHooks  = () => this._buildNodeHooks("onRetain",  "retained", tupleSort(), (node) => ({ $state$: node.state }));
-  getOnEnterHooks   = () => this._buildNodeHooks("onEnter",   "entering", tupleSort(), (node) => ({ $state$: node.state }));
-  getOnFinishHooks  = () => this._buildNodeHooks("onFinish",  "to",       tupleSort(), (node) => ({ $treeChanges$: this.treeChanges }));
-  getOnSuccessHooks = () => this._buildNodeHooks("onSuccess", "to",       tupleSort(), undefined, { async: false, rejectIfSuperseded: false });
-  getOnErrorHooks   = () => this._buildNodeHooks("onError",   "to",       tupleSort(), undefined, { async: false, rejectIfSuperseded: false });
+  getOnExitHooks    = () => this._buildNodeHooks("onExit",    "exiting",  tupleSort(true),  { stateHook: true });
+  getOnRetainHooks  = () => this._buildNodeHooks("onRetain",  "retained", tupleSort(false), { stateHook: true });
+  getOnEnterHooks   = () => this._buildNodeHooks("onEnter",   "entering", tupleSort(false), { stateHook: true });
+  getOnFinishHooks  = () => this._buildNodeHooks("onFinish",  "to",       tupleSort());
+  getOnSuccessHooks = () => this._buildNodeHooks("onSuccess", "to",       tupleSort(), { async: false, rejectIfSuperseded: false });
+  getOnErrorHooks   = () => this._buildNodeHooks("onError",   "to",       tupleSort(), { async: false, rejectIfSuperseded: false });
 
   asyncHooks() {
     let onStartHooks    = this.getOnStartHooks();
@@ -66,19 +65,18 @@ export class HookBuilder {
    * Returns an array of newly built TransitionHook objects.
    *
    * - Finds all IEventHooks registered for the given `hookType` which matched the transition's [[TreeChanges]].
-   * - Finds [[Node]] (or `Node[]`) to use as the TransitionHook context(s)
-   * - For each of the [[Node]]s, creates a TransitionHook
+   * - Finds [[PathNode]] (or `PathNode[]`) to use as the TransitionHook context(s)
+   * - For each of the [[PathNode]]s, creates a TransitionHook
    *
    * @param hookType the name of the hook registration function, e.g., 'onEnter', 'onFinish'.
-   * @param matchingNodesProp selects which [[Node]]s from the [[IMatchingNodes]] object to create hooks for.
-   * @param getLocals a function which accepts a [[Node]] and returns additional locals to provide to the hook as injectables
+   * @param matchingNodesProp selects which [[PathNode]]s from the [[IMatchingNodes]] object to create hooks for.
+   * @param getLocals a function which accepts a [[PathNode]] and returns additional locals to provide to the hook as injectables
    * @param sortHooksFn a function which compares two HookTuple and returns <1, 0, or >1
    * @param options any specific Transition Hook Options
    */
   private _buildNodeHooks(hookType: string,
                           matchingNodesProp: string,
                           sortHooksFn: (l: HookTuple, r: HookTuple) => number,
-                          getLocals: (node: Node) => any = (node) => ({}),
                           options?: TransitionHookOptions): TransitionHook[] {
 
     // Find all the matching registered hooks for a given hook type
@@ -86,17 +84,24 @@ export class HookBuilder {
     if (!matchingHooks) return [];
 
      const makeTransitionHooks = (hook: IEventHook) => {
-      // Fetch the Nodes that caused this hook to match.
-      let matches: IMatchingNodes = hook.matches(this.treeChanges);
-      // Select the Node[] that will be used as TransitionHook context objects
-      let nodes: Node[] = matches[matchingNodesProp];
+       // Fetch the Nodes that caused this hook to match.
+       let matches: IMatchingNodes = hook.matches(this.treeChanges);
+       // Select the PathNode[] that will be used as TransitionHook context objects
+       let matchingNodes: PathNode[] = matches[matchingNodesProp];
 
-      // Return an array of HookTuples
-      return nodes.map(node => {
-        let _options = extend({ bind: hook.bind, traceData: { hookType, context: node} }, this.baseHookOptions, options);
-        let transitionHook = new TransitionHook(hook.callback, getLocals(node), node.resolveContext, _options);
-        return <HookTuple> { hook, node, transitionHook };
-      });
+       // When invoking 'exiting' hooks, give them the "from path" for resolve data.
+       // Everything else gets the "to path"
+       let resolvePath = matchingNodesProp === 'exiting' ? this.treeChanges.from : this.treeChanges.to;
+       let resolveContext = new ResolveContext(resolvePath);
+
+       // Return an array of HookTuples
+       return matchingNodes.map(node => {
+         let _options = extend({ bind: hook.bind, traceData: { hookType, context: node} }, this.baseHookOptions, options);
+         let state = _options.stateHook ? node.state : null;
+         let context = resolveContext.subContext(node.state);
+         let transitionHook = new TransitionHook(this.transition, state, hook.callback, context, _options);
+         return <HookTuple> { hook, node, transitionHook };
+       });
     };
 
     return matchingHooks.map(makeTransitionHooks)
@@ -125,12 +130,12 @@ export class HookBuilder {
   }
 }
 
-interface HookTuple { hook: IEventHook, node: Node, transitionHook: TransitionHook }
+interface HookTuple { hook: IEventHook, node: PathNode, transitionHook: TransitionHook }
 
 /**
  * A factory for a sort function for HookTuples.
  *
- * The sort function first compares the Node depth (how deep in the state tree a node is), then compares
+ * The sort function first compares the PathNode depth (how deep in the state tree a node is), then compares
  * the EventHook priority.
  *
  * @param reverseDepthSort a boolean, when true, reverses the sort order for the node depth

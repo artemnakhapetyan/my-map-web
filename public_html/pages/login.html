@@ -1,0 +1,41 @@
+<div layout="column" layout-fill ng-cloak>
+
+    <md-toolbar id="map-header-toolbar">
+        <div class="md-toolbar-tools">
+            <h2 class="md-flex">ფენების რედაქტორი</h2>
+        </div>
+    </md-toolbar>
+
+    <md-content layout="column" flex>
+
+        <form name="auth" novalidate style="height: 100%;" ng-submit="login($event)">
+            <md-content 
+                layout="column" layout-gt-sm="row" layout-align="center center"
+                style="height: 100%; min-height: 500px;">
+                <!--<img src="resources/imgs/kanc-logo.png" alt='logo'/>-->
+                <div style="height: 20px;" hide-gt-sm></div>
+                <md-input-container>
+                    <label>მომხმარებელი</label>
+                    <input name="username" required 
+                           type="text"
+                           ng-model="user.username"
+                           auto-focus>
+                    <div ng-messages="auth.username.$error">
+                        <div ng-message="required">მიუთითეთ მომხმარებელი.</div>
+                    </div>
+                </md-input-container>
+                <md-input-container>
+                    <label>პაროლი</label>
+                    <input name="password" type="password" required 
+                           ng-model="user.password">
+                    <div ng-messages="auth.password.$error">
+                        <div ng-message="required">მიუთითეთ პაროლი.</div>
+                    </div>
+                </md-input-container>
+
+                <md-button type="submit" class="md-raised md-primary" >შესვლა</md-button>
+            </md-content>
+        </form>
+
+    </md-content>
+</div>

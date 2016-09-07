@@ -1,10 +1,49 @@
 <div layout="column" layout-fill ng-cloak>
-  <md-toolbar class="md-warn">
+
+  <md-toolbar id="map-header-toolbar">
     <div class="md-toolbar-tools">
-      <h2 class="md-flex">My Map</h2>
+      <h2 class="md-flex">Gis data analysis</h2>
+      <span flex></span>
+        <!--<md-button ng-click="logout()" class="md-icon-button md-accent" aria-label="input">
+            <md-icon md-font-set="material-icons" class="ng-scope ng-isolate-scope material-icons">input</md-icon>
+        </md-button>-->
     </div>
+      
   </md-toolbar>
-  <md-content layout="column" flex id="olmap">
     
+  <md-content layout="column" flex>
+      
+        <div id="olmap" style="with: 100%; height: calc( 100% - 64px ); position: relative; overflow: hidden;"></div>
+      
+        <md-button 
+            ng-click="zoomIn();" 
+            class="md-fab md-accent md-fab-top-right md-mini" 
+            style="margin-top: 0px;"
+            aria-label="input">
+            <md-icon md-font-set="material-icons" class="ng-scope ng-isolate-scope material-icons">add</md-icon>
+        </md-button>
+      
+        <md-button 
+            ng-click="zoomOut();" 
+            class="md-fab md-accent md-fab-top-right md-mini" 
+            style="margin-top: 55px;"
+            aria-label="input">
+            <md-icon md-font-set="material-icons" class="ng-scope ng-isolate-scope material-icons">remove</md-icon>
+        </md-button>
+      
+        <div ui-view="baseLayersView" class="view-animate" style="position: absolute; bottom: 15px; left: 365px;"></div>  
+        
+        <div ui-view="layers4EditView" class="view-animate" style="position: absolute; left: 0px; top: 0px; width: 350px; height: 100%; background-color: white;"></div>  
+      
+        <!--<div ui-view="layerObjectEditorView" class="view-animate" style="position: absolute; left 15px; top: 0px; width: 250px; height: 100%; background-color: white;"></div>  -->
+        
+        <!-- create letter view -->
+        <md-sidenav 
+            class="md-sidenav-right md-whiteframe-4dp ux-letter-sidebar" 
+            md-component-id="layer-object-editor"
+            md-disable-backdrop
+            style="width: 380px;"
+            ui-view="layerObjectEditorView"></md-sidenav>
+        
   </md-content>
 </div>

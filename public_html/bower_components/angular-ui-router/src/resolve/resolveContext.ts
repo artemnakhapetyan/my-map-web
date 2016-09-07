@@ -1,185 +1,192 @@
 /** @module resolve */ /** for typedoc */
-import {IInjectable, find, filter, map, tail, defaults, extend, pick, omit} from "../common/common";
-import {prop, propEq} from "../common/hof";
-import {isString, isObject} from "../common/predicates";
+import { find, tail, uniqR, unnestR, inArray } from "../common/common";
+import {propEq} from "../common/hof";
 import {trace} from "../common/trace";
 import {services} from "../common/coreservices";
-import {Resolvables, ResolvePolicy, IOptions1} from "./interface";
+import {resolvePolicies, PolicyWhen} from "./interface";
 
-import {Node} from "../path/module";
+import {PathNode} from "../path/node";
 import {Resolvable} from "./resolvable";
-import {State} from "../state/module";
-import {mergeR} from "../common/common";
+import {State} from "../state/stateObject";
 import {PathFactory} from "../path/pathFactory";
+import {stringify} from "../common/strings";
+import {Transition} from "../transition/transition";
+import {UIInjector} from "../common/interface";
 
-// TODO: make this configurable
-let defaultResolvePolicy = ResolvePolicy[ResolvePolicy.LAZY];
+var when = resolvePolicies.when;
+const ALL_WHENS = [when.EAGER, when.LAZY];
+const EAGER_WHENS = [when.EAGER];
 
-interface IPolicies { [key: string]: string; }
-interface Promises { [key: string]: Promise<any>; }
-
+/**
+ * Encapsulates Depenency Injection for a path of nodes
+ *
+ * UI-Router states are organized as a tree.
+ * A nested state has a path of ancestors to the root of the tree.
+ * When a state is being activated, each element in the path is wrapped as a [[PathNode]].
+ * A `PathNode` is a stateful object that holds things like parameters and resolvables for the state being activated.
+ *
+ * The ResolveContext closes over the [[PathNode]]s, and provides DI for the last node in the path.
+ */
 export class ResolveContext {
 
-  private _nodeFor: Function;
-  private _pathTo: Function;
+  constructor(private _path: PathNode[]) { }
 
-  constructor(private _path: Node[]) {
-    extend(this, {
-      _nodeFor(state: State): Node {
-        return <Node> find(this._path, propEq('state', state));
-      },
-      _pathTo(state: State): Node[] {
-        return PathFactory.subPath(this._path, state);
-      }
-    });
+  /** Gets all the tokens found in the resolve context, de-duplicated */
+  getTokens() {
+    return this._path.reduce((acc, node) => acc.concat(node.resolvables.map(r => r.token)), []).reduce(uniqR, []);
   }
 
   /**
-   * Gets the available Resolvables for the last element of this path.
+   * Gets the Resolvable that matches the token
    *
-   * @param state the State (within the ResolveContext's Path) for which to get resolvables
-   * @param options
-   *
-   * options.omitOwnLocals: array of property names
-   *   Omits those Resolvables which are found on the last element of the path.
-   *
-   *   This will hide a deepest-level resolvable (by name), potentially exposing a parent resolvable of
-   *   the same name further up the state tree.
-   *
-   *   This is used by Resolvable.resolve() in order to provide the Resolvable access to all the other
-   *   Resolvables at its own PathElement level, yet disallow that Resolvable access to its own injectable Resolvable.
-   *
-   *   This is also used to allow a state to override a parent state's resolve while also injecting
-   *   that parent state's resolve:
-   *
-   *   state({ name: 'G', resolve: { _G: function() { return "G"; } } });
-   *   state({ name: 'G.G2', resolve: { _G: function(_G) { return _G + "G2"; } } });
-   *   where injecting _G into a controller will yield "GG2"
+   * Gets the last Resolvable that matches the token in this context, or undefined.
+   * Throws an error if it doesn't exist in the ResolveContext
    */
-  getResolvables(state?: State, options?: any): Resolvables {
-    options = defaults(options, { omitOwnLocals: [] });
-
-    const path = (state ?  this._pathTo(state) : this._path);
-    const last = tail(path);
-
-    return path.reduce((memo, node) => {
-      let omitProps = (node === last) ? options.omitOwnLocals : [];
-      let filteredResolvables = omit(node.resolves, omitProps);
-      return extend(memo, filteredResolvables);
-    }, <Resolvables> {});
+  getResolvable(token): Resolvable {
+    var matching = this._path.map(node => node.resolvables)
+        .reduce(unnestR, [])
+        .filter((r: Resolvable) => r.token === token);
+    return tail(matching);
   }
 
-  /** Inspects a function `fn` for its dependencies.  Returns an object containing any matching Resolvables */
-  getResolvablesForFn(fn: IInjectable): { [key: string]: Resolvable } {
-    let deps = services.$injector.annotate(<Function> fn, services.$injector.strictDi);
-    return <any> pick(this.getResolvables(), deps);
+  /**
+   * Returns a ResolveContext that includes a portion of this one
+   *
+   * Given a state, this method creates a new ResolveContext from this one.
+   * The new context starts at the first node (root) and stops at the node for the `state` parameter.
+   *
+   * #### Why
+   *
+   * When a transition is created, the nodes in the "To Path" are injected from a ResolveContext.
+   * A ResolveContext closes over a path of [[PathNode]]s and processes the resolvables.
+   * The "To State" can inject values from its own resolvables, as well as those from all its ancestor state's (node's).
+   * This method is used to create a narrower context when injecting ancestor nodes.
+   *
+   * @example
+   * `let ABCD = new ResolveContext([A, B, C, D]);`
+   *
+   * Given a path `[A, B, C, D]`, where `A`, `B`, `C` and `D` are nodes for states `a`, `b`, `c`, `d`:
+   * When injecting `D`, `D` should have access to all resolvables from `A`, `B`, `C`, `D`.
+   * However, `B` should only be able to access resolvables from `A`, `B`.
+   *
+   * When resolving for the `B` node, first take the full "To Path" Context `[A,B,C,D]` and limit to the subpath `[A,B]`.
+   * `let AB = ABCD.subcontext(a)`
+   */
+  subContext(state: State): ResolveContext {
+    return new ResolveContext(PathFactory.subPath(this._path, node => node.state === state));
   }
 
-  isolateRootTo(state: State): ResolveContext {
-    return new ResolveContext(this._pathTo(state));
+  /**
+   * Adds Resolvables to the node that matches the state
+   *
+   * This adds a [[Resolvable]] (generally one created on the fly; not declared on a [[StateDeclaration.resolve]] block).
+   * The resolvable is added to the node matching the `state` parameter.
+   *
+   * These new resolvables are not automatically fetched.
+   * The calling code should either fetch them, fetch something that depends on them,
+   * or rely on [[resolvePath]] being called when some state is being entered.
+   *
+   * Note: each resolvable's [[ResolvePolicy]] is merged with the state's policy, and the global default.
+   *
+   * @param newResolvables the new Resolvables
+   * @param state Used to find the node to put the resolvable on
+   */
+  addResolvables(newResolvables: Resolvable[], state: State) {
+    var node = <PathNode> find(this._path, propEq('state', state));
+    var keys = newResolvables.map(r => r.token);
+    node.resolvables = node.resolvables.filter(r => keys.indexOf(r.token) === -1).concat(newResolvables);
   }
-  
-  addResolvables(resolvables: Resolvables, state: State) {
-    extend(this._nodeFor(state).resolves, resolvables);
-  }
-  
-  /** Gets the resolvables declared on a particular state */
-  getOwnResolvables(state: State): Resolvables {
-    return extend({}, this._nodeFor(state).resolves);
-  }
-   
-  // Returns a promise for an array of resolved path Element promises
-  resolvePath(options: IOptions1 = {}): Promise<any> {
-    trace.traceResolvePath(this._path, options);
-    const promiseForNode = (node: Node) => this.resolvePathElement(node.state, options);
-    return services.$q.all(<any> map(this._path, promiseForNode)).then(all => all.reduce(mergeR, {}));
-  }
-
-  // returns a promise for all the resolvables on this PathElement
-  // options.resolvePolicy: only return promises for those Resolvables which are at 
-  // the specified policy, or above.  i.e., options.resolvePolicy === 'lazy' will
-  // resolve both 'lazy' and 'eager' resolves.
-  resolvePathElement(state: State, options: IOptions1 = {}): Promise<any> {
-    // The caller can request the path be resolved for a given policy and "below" 
-    let policy: string = options && options.resolvePolicy;
-    let policyOrdinal: number = ResolvePolicy[policy || defaultResolvePolicy];
-    // Get path Resolvables available to this element
-    let resolvables = this.getOwnResolvables(state);
-
-    const matchesRequestedPolicy = resolvable => getPolicy(state.resolvePolicy, resolvable) >= policyOrdinal;
-    let matchingResolves = filter(resolvables, matchesRequestedPolicy);
-
-    const getResolvePromise = (resolvable: Resolvable) => resolvable.get(this.isolateRootTo(state), options);
-    let resolvablePromises: Promises = <any> map(matchingResolves, getResolvePromise);
-
-    trace.traceResolvePathElement(this, matchingResolves, options);
-
-    return services.$q.all(resolvablePromises);
-  } 
-  
   
   /**
-   * Injects a function given the Resolvables available in the path, from the first node
-   * up to the node for the given state.
+   * Returns a promise for an array of resolved path Element promises
    *
-   * First it resolves all the resolvable depencies.  When they are done resolving, it invokes
-   * the function.
-   *
-   * @return a promise for the return value of the function.
-   *
-   * @param fn: the function to inject (i.e., onEnter, onExit, controller)
-   * @param locals: are the angular $injector-style locals to inject
-   * @param options: options (TODO: document)
+   * @param when
+   * @param trans
+   * @returns {Promise<any>|any}
    */
-  invokeLater(fn: IInjectable, locals: any = {}, options: IOptions1 = {}): Promise<any> {
-    let resolvables = this.getResolvablesForFn(fn);
-    trace.tracePathElementInvoke(tail(this._path), fn, Object.keys(resolvables), extend({when: "Later"}, options));
-    const getPromise = (resolvable: Resolvable) => resolvable.get(this, options);
-    let promises: Promises = <any> map(resolvables, getPromise);
+  resolvePath(when: PolicyWhen = "LAZY", trans?: Transition): Promise<{ token: any, value: any }[]> {
+    // This option determines which 'when' policy Resolvables we are about to fetch.
+    let whenOption: string = inArray(ALL_WHENS, when) ? when : "LAZY";
+    // If the caller specified EAGER, only the EAGER Resolvables are fetched.
+    // if the caller specified LAZY, both EAGER and LAZY Resolvables are fetched.`
+    let matchedWhens = whenOption === resolvePolicies.when.EAGER ? EAGER_WHENS : ALL_WHENS;
     
-    return services.$q.all(promises).then(() => {
-      try {
-        return this.invokeNow(fn, locals, options);
-      } catch (error) {
-        return services.$q.reject(error);
-      }
-    });
+    // get the subpath to the state argument, if provided
+    trace.traceResolvePath(this._path, when, trans);
+
+    let promises: Promise<any>[] = this._path.reduce((acc, node) => {
+      const matchesRequestedPolicy = (resolvable: Resolvable) =>
+          inArray(matchedWhens, resolvable.getPolicy(node.state).when);
+      let nodeResolvables = node.resolvables.filter(matchesRequestedPolicy);
+      let subContext = this.subContext(node.state);
+
+      // For the matching Resolvables, start their async fetch process.
+      var getResult = (r: Resolvable) => r.get(subContext, trans)
+          // Return a tuple that includes the Resolvable's token
+          .then(value => ({ token: r.token, value: value }));
+      return acc.concat(nodeResolvables.map(getResult));
+    }, []);
+
+    return services.$q.all(promises);
+  }
+
+  injector(): UIInjector {
+    return new UIInjectorImpl(this);
+  }
+
+  findNode(resolvable: Resolvable): PathNode {
+    return find(this._path, (node: PathNode) => inArray(node.resolvables, resolvable));
   }
 
   /**
-   * Immediately injects a function with the dependent Resolvables available in the path, from
-   * the first node up to the node for the given state.
+   * Gets the async dependencies of a Resolvable
    *
-   * If a Resolvable is not yet resolved, then null is injected in place of the resolvable.
-   *
-   * @return the return value of the function.
-   *
-   * @param fn: the function to inject (i.e., onEnter, onExit, controller)
-   * @param locals: are the angular $injector-style locals to inject
-   * @param options: options (TODO: document)
+   * Given a Resolvable, returns its dependencies as a Resolvable[]
    */
-  // Injects a function at this PathElement level with available Resolvables
-  // Does not wait until all Resolvables have been resolved; you must call PathElement.resolve() (or manually resolve each dep) first
-  invokeNow(fn: IInjectable, locals: any, options: any = {}) {
-    let resolvables = this.getResolvablesForFn(fn);
-    trace.tracePathElementInvoke(tail(this._path), fn, Object.keys(resolvables), extend({when: "Now  "}, options));
-    let resolvedLocals = map(resolvables, prop("data"));
-    return services.$injector.invoke(<Function> fn, options.bind || null, extend({}, locals, resolvedLocals));
+  getDependencies(resolvable: Resolvable): Resolvable[] {
+    let node = this.findNode(resolvable);
+    // Find which other resolvables are "visible" to the `resolvable` argument
+    // subpath stopping at resolvable's node, or the whole path (if the resolvable isn't in the path)
+    var subPath: PathNode[] = PathFactory.subPath(this._path, x => x === node) || this._path;
+    var availableResolvables: Resolvable[] = subPath
+        .reduce((acc, node) => acc.concat(node.resolvables), []) //all of subpath's resolvables
+        .filter(res => res !== resolvable); // filter out the `resolvable` argument
+
+    const getDependency = token => {
+      let matching = availableResolvables.filter(r => r.token === token);
+      if (matching.length) return tail(matching);
+
+      let fromInjector = services.$injector.get(token);
+      if (!fromInjector) {
+        throw new Error("Could not find Dependency Injection token: " + stringify(token));
+      }
+
+      return new Resolvable(token, () => fromInjector, [], fromInjector);
+    };
+
+    return resolvable.deps.map(getDependency);
   }
 }
 
-/**
- * Given a state's resolvePolicy attribute and a resolvable from that state, returns the policy ordinal for the Resolvable
- * Use the policy declared for the Resolve. If undefined, use the policy declared for the State.  If
- * undefined, use the system defaultResolvePolicy.
- * 
- * @param stateResolvePolicyConf The raw resolvePolicy declaration on the state object; may be a String or Object
- * @param resolvable The resolvable to compute the policy for
- */
-function getPolicy(stateResolvePolicyConf, resolvable: Resolvable): number {
-  // Normalize the configuration on the state to either state-level (a string) or resolve-level (a Map of string:string)
-  let stateLevelPolicy: string = <string> (isString(stateResolvePolicyConf) ? stateResolvePolicyConf : null);
-  let resolveLevelPolicies: IPolicies = <any> (isObject(stateResolvePolicyConf) ? stateResolvePolicyConf : {});
-  let policyName = resolveLevelPolicies[resolvable.name] || stateLevelPolicy || defaultResolvePolicy;
-  return ResolvePolicy[policyName];  
+class UIInjectorImpl implements UIInjector {
+  constructor(public context: ResolveContext) { }
+  get(token: any) {
+    var resolvable = this.context.getResolvable(token);
+    if (resolvable) {
+      if (!resolvable.resolved) {
+        throw new Error("Resolvable async .get() not complete:" + stringify(resolvable.token))
+      }
+      return resolvable.data;
+    }
+    return services.$injector.get(token);
+  }
+
+  getAsync(token: any) {
+    var resolvable = this.context.getResolvable(token);
+    if (resolvable) return resolvable.get(this.context);
+    return services.$q.when(services.$injector.get(token));
+  }
+  
+  /** The native injector ($injector on ng1, Root Injector on ng2, justjs injector for everything else) */
+  native = services.$injector;
 }

@@ -1,0 +1,128 @@
+@font-face {
+  font-family: 'bpg_mrgvlovani';
+  src: url('../fonts/bpg_mrgvlovani_2009/bpg_mrgvlovani_2009.eot');
+  src: url('../fonts/bpg_mrgvlovani_2009/bpg_mrgvlovani_2009.eot?#iefix') format('embedded-opentype'), url('../fonts/bpg_mrgvlovani_2009/bpg_mrgvlovani_2009.woff') format('woff'), url('../fonts/bpg_mrgvlovani_2009/bpg_mrgvlovani_2009.ttf') format('truetype');
+  font-weight: normal;
+  font-style: normal;
+}
+@font-face {
+  font-family: 'bpg_mrgvlovani_caps';
+  src: url('../fonts/bpg_mrgvlovani_caps/bpg_mrgvlovani_caps.eot');
+  src: url('../fonts/bpg_mrgvlovani_caps/bpg_mrgvlovani_caps.eot?#iefix') format('embedded-opentype'), url('../fonts/bpg_mrgvlovani_caps/bpg_mrgvlovani_caps.woff') format('woff'), url('../fonts/bpg_mrgvlovani_caps/bpg_mrgvlovani_caps.ttf') format('truetype');
+  font-weight: normal;
+  font-style: normal;
+}
+/* line 21, E:\map\assets\less\fonts.less */
+.bpg-mrgvlovani {
+  font-family: "bpg_mrgvlovani", sans-serif;
+}
+/* line 25, E:\map\assets\less\fonts.less */
+.bpg-mrgvlovani-caps {
+  font-family: "bpg_mrgvlovani_caps", sans-serif;
+}
+
+/* line 14, E:\map\assets\less\style.less */
+body {
+  font-family: bpg_mrgvlovani, Roboto, sans-serif !important;
+}
+
+button, select, html, textarea, input {
+    font-family: bpg_mrgvlovani, Roboto, sans-serif !important;
+}
+
+.md-toolbar-tools {
+    font-size: 17px !important;
+}
+
+
+.my-fab-bottom-left {
+    bottom: -20px !important;
+    left: 10px !important;
+}
+
+.olForeignContainer{
+    
+}
+
+.map-el{
+    box-shadow: 0 0 10px rgba(0, 0, 0, 0.5) !important;
+    /*background-image: url(../imgs/tr2.png);*/
+    /*background-color: rgba(11, 74, 119, 0.75);*/
+    background-color: white;
+    background-repeat: repeat;
+    position: absolute;
+    z-index: 10000;
+    text-align: center;
+    padding: 4px;
+    vertical-align: middle;
+}
+
+.map-el-1{
+    box-shadow: 0 0 10px rgba(0, 0, 0, 0.5) !important;
+    /*background-image: url(../imgs/tr2.png);*/
+    /*background-color: rgba(11, 74, 119, 0.75);*/
+   /* background-color: white;*/
+    background-repeat: repeat;
+    position: absolute;
+    z-index: 10000;
+}
+
+.map-base-layers{
+    width: 84px;
+    height: 84px;
+}
+
+.map-base-layers-switch{
+  width: 180px;
+  padding: 6px;
+  background-color: #fff;
+  -webkit-border-radius: 3px;
+  -moz-border-radius: 3px;
+  border-radius: 3px;
+}
+
+.map-base-layers-switch:before {
+  content: '';
+  position: absolute;
+  bottom: -8px;
+  left: 20%;
+  border-style: solid;
+  border-width: 8px 8px 0 8px;
+  border-color: #fff transparent transparent transparent;
+  -webkit-transform: translateX(-20%);
+  -moz-transform: translateX(-20%);
+  transform: translateX(-20%);
+}
+
+.map-base-layers-choosed-img{
+    width: 84px; 
+    height: 84px;
+    cursor: pointer;
+}
+
+.map-base-layers-img{
+    width: 84px; 
+    height: 84px;
+    padding: 3px;
+    cursor: pointer;
+}
+
+.my-date-picker .md-datepicker-input-container{
+    width: 75%; border-bottom-width: 0px !important;
+}
+
+.my-date-picker .md-datepicker-input-container .md-datepicker-focused{
+    border-bottom-width: 0px;
+}
+
+.my-date-picker .md-datepicker-button{
+    margin-top: 0px; 
+    padding-top: 0px;
+    /* top: 0px; */
+    /* height: auto; */
+    /* line-height: 0; */
+    vertical-align: top;
+    padding-left: 0px !important;
+    padding-right: 0px !important;
+    width: auto !important;
+}

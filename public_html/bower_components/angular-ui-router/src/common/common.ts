@@ -6,6 +6,7 @@
 
 import {isFunction, isString, isArray, isRegExp, isDate} from "./predicates";
 import { all, any, not, prop, curry } from "./hof";
+import {services} from "./coreservices";
 
 let w: any = typeof window === 'undefined' ? {} : window;
 let angular = w.angular || {};
@@ -119,7 +120,7 @@ export const inherit = (parent, extra) =>
 const restArgs = (args, idx = 0) => Array.prototype.concat.apply(Array.prototype, Array.prototype.slice.call(args, idx));
 
 /** Given an array, returns true if the object is found in the array, (using indexOf) */
-const inArray = (array: any[], obj: any) => array.indexOf(obj) !== -1;
+export const inArray = (array: any[], obj: any) => array.indexOf(obj) !== -1;
 
 /** Given an array, and an item, if the item is found in the array, it removes it (in-place).  The same array is returned */
 export const removeFrom = curry((array: any[], obj) => {
@@ -368,7 +369,10 @@ export const unnestR   = (memo: any[], elem) => memo.concat(elem);
  */
 export const flattenR  = (memo: any[], elem) => isArray(elem) ? memo.concat(elem.reduce(flattenR, [])) : pushR(memo, elem);
 /** Reduce function that pushes an object to an array, then returns the array.  Mostly just for [[flattenR]] */
-function pushR(arr: any[], obj) { arr.push(obj); return arr; }
+export function pushR(arr: any[], obj) { arr.push(obj); return arr; }
+
+/** Reduce function that filters out duplicates */
+export const uniqR = (acc, token) => inArray(acc, token) ? acc : pushR(acc, token);
 
 /**
  * Return a new array with a single level of arrays unnested.
@@ -535,9 +539,9 @@ function _arraysEq(a1, a2) {
   if (a1.length !== a2.length) return false;
   return arrayTuples(a1, a2).reduce((b, t) => b && _equals(t[0], t[1]), true);
 }
-//
-//const _addToGroup = (result, keyFn) => (item) =>
-//  (result[keyFn(item)] = result[keyFn(item)] || []).push(item) && result;
-//const groupBy = (array, keyFn) => array.reduce((memo, item) => _addToGroup(memo, keyFn), {});
-//
-//
+
+// issue #2676
+export const silenceUncaughtInPromise = (promise: Promise<any>) =>
+    promise.catch(e => 0) && promise;
+export const silentRejection = (error: any) =>
+    silenceUncaughtInPromise(services.$q.reject(error));

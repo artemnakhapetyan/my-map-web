@@ -2,8 +2,8 @@
 import {equals, applyPairs, removeFrom, TypedMap} from "../common/common";
 import {curry, prop} from "../common/hof";
 import {isString, isArray} from "../common/predicates";
-import {trace} from "../common/module";
-import {Node} from "../path/node";
+import {trace} from "../common/trace";
+import {PathNode} from "../path/node";
 
 import {ActiveUIView, ViewContext, ViewConfig} from "./interface";
 import {_ViewDeclaration} from "../state/interface";
@@ -11,7 +11,7 @@ import {_ViewDeclaration} from "../state/interface";
 const match = (obj1, ...keys) =>
     (obj2) => keys.reduce((memo, key) => memo && obj1[key] === obj2[key], true);
 
-export type ViewConfigFactory = (node: Node, decl: _ViewDeclaration) => ViewConfig|ViewConfig[];
+export type ViewConfigFactory = (path: PathNode[], decl: _ViewDeclaration) => ViewConfig|ViewConfig[];
 
 /**
  * The View service
@@ -32,10 +32,10 @@ export class ViewService {
     this._viewConfigFactories[viewType] = factory;
   }
 
-  createViewConfig(node: Node, decl: _ViewDeclaration): ViewConfig[] {
+  createViewConfig(path: PathNode[], decl: _ViewDeclaration): ViewConfig[] {
     let cfgFactory = this._viewConfigFactories[decl.$type];
     if (!cfgFactory) throw new Error("ViewService: No view config factory registered for type " + decl.$type);
-    let cfgs = cfgFactory(node, decl);
+    let cfgs = cfgFactory(path, decl);
     return isArray(cfgs) ? cfgs : [cfgs];
   }
   
@@ -157,14 +157,14 @@ export class ViewService {
       return [uiView, matchingConfigs[0]];
     };
 
-    const configureUiView = ([uiView, viewConfig]) => {
+    const configureUIView = ([uiView, viewConfig]) => {
       // If a parent ui-view is reconfigured, it could destroy child ui-views.
       // Before configuring a child ui-view, make sure it's still in the active uiViews array.
       if (this.uiViews.indexOf(uiView) !== -1)
         uiView.configUpdated(viewConfig);
     };
 
-    this.uiViews.sort(depthCompare(uiViewDepth, 1)).map(matchingConfigPair).forEach(configureUiView);
+    this.uiViews.sort(depthCompare(uiViewDepth, 1)).map(matchingConfigPair).forEach(configureUIView);
   };
 
   /**
@@ -176,12 +176,12 @@ export class ViewService {
    *                   of the view.
    * @return {Function} Returns a de-registration function used when the view is destroyed.
    */
-  registerUiView(uiView: ActiveUIView) {
-    trace.traceViewServiceUiViewEvent("-> Registering", uiView);
+  registerUIView(uiView: ActiveUIView) {
+    trace.traceViewServiceUIViewEvent("-> Registering", uiView);
     let uiViews = this.uiViews;
     const fqnMatches = uiv => uiv.fqn === uiView.fqn;
     if (uiViews.filter(fqnMatches).length)
-      trace.traceViewServiceUiViewEvent("!!!! duplicate uiView named:", uiView);
+      trace.traceViewServiceUIViewEvent("!!!! duplicate uiView named:", uiView);
 
     uiViews.push(uiView);
     this.sync();
@@ -189,10 +189,10 @@ export class ViewService {
     return () => {
       let idx = uiViews.indexOf(uiView);
       if (idx <= 0) {
-        trace.traceViewServiceUiViewEvent("Tried removing non-registered uiView", uiView);
+        trace.traceViewServiceUIViewEvent("Tried removing non-registered uiView", uiView);
         return;
       }
-      trace.traceViewServiceUiViewEvent("<- Deregistering", uiView);
+      trace.traceViewServiceUIViewEvent("<- Deregistering", uiView);
       removeFrom(uiViews)(uiView);
     };
   };
@@ -223,7 +223,7 @@ export class ViewService {
    *
    * @returns the normalized uiViewName and uiViewContextAnchor that the view targets
    */
-  static normalizeUiViewTarget(context: ViewContext, rawViewName = "") {
+  static normalizeUIViewTarget(context: ViewContext, rawViewName = "") {
     // TODO: Validate incoming view name with a regexp to allow:
     // ex: "view.name@foo.bar" , "^.^.view.name" , "view.name@^.^" , "" ,
     // "@" , "$default@^" , "!$default.$default" , "!foo.bar"

@@ -41,20 +41,20 @@ export function kebobString(camelCase: string) {
       .replace(/([A-Z])/g, $1 => "-" + $1.toLowerCase()); // replace rest
 }
 
-function _toJson(obj) {
+function _toJson(obj: Object) {
   return JSON.stringify(obj);
 }
 
-function _fromJson(json) {
+function _fromJson(json: string) {
   return isString(json) ? JSON.parse(json) : json;
 }
 
 
-function promiseToString(p) {
+function promiseToString(p: Promise<any>) {
   return `Promise(${JSON.stringify(p)})`;
 }
 
-export function functionToString(fn) {
+export function functionToString(fn: Function) {
   let fnStr = fnToString(fn);
   let namedFunctionMatch = fnStr.match(/^(function [^ ]+\([^)]*\))/);
   return namedFunctionMatch ? namedFunctionMatch[1] : fnStr;
@@ -65,24 +65,29 @@ export function fnToString(fn: IInjectable) {
   return _fn && _fn.toString() || "undefined";
 }
 
-const isTransitionRejectionPromise = Rejection.isTransitionRejectionPromise;
+let stringifyPatternFn = null;
+let stringifyPattern = function(value) {
+  let isTransitionRejectionPromise = Rejection.isTransitionRejectionPromise;
 
-let stringifyPattern = pattern([
-  [not(isDefined),                  val("undefined")],
-  [isNull,                          val("null")],
-  [isPromise,                       promiseToString],
-  [isTransitionRejectionPromise,    x => x._transitionRejection.toString()],
-  [is(Rejection),                   invoke("toString")],
-  [is(Transition),                  invoke("toString")],
-  [is(Resolvable),                  invoke("toString")],
-  [isInjectable,                    functionToString],
-  [val(true),                       identity]
-]);
+  stringifyPatternFn = stringifyPatternFn || pattern([
+    [not(isDefined),                  val("undefined")],
+    [isNull,                          val("null")],
+    [isPromise,                       val("[Promise]")],
+    [isTransitionRejectionPromise,    (x: any) => x._transitionRejection.toString()],
+    [is(Rejection),                   invoke("toString")],
+    [is(Transition),                  invoke("toString")],
+    [is(Resolvable),                  invoke("toString")],
+    [isInjectable,                    functionToString],
+    [val(true),                       identity]
+  ]);
 
-export function stringify(o) {
-  var seen = [];
+  return stringifyPatternFn(value);
+};
 
-  function format(val) {
+export function stringify(o: Object) {
+  var seen: any[] = [];
+
+  function format(val: any) {
     if (isObject(val)) {
       if (seen.indexOf(val) !== -1) return '[circular ref]';
       seen.push(val);
@@ -94,7 +99,7 @@ export function stringify(o) {
 }
 
 /** Returns a function that splits a string on a character or substring */
-export const beforeAfterSubstr = char => str => {
+export const beforeAfterSubstr = (char: string) => (str: string) => {
   if (!str) return ["", ""];
   let idx = str.indexOf(char);
   if (idx === -1) return [str, ""];

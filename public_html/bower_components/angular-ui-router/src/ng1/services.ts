@@ -12,16 +12,22 @@
 /** for typedoc */
 import {UIRouter} from "../router";
 import {services} from "../common/coreservices";
-import {map, bindFunctions, removeFrom, find, noop} from "../common/common";
-import {prop, propEq} from "../common/hof";
-import {isObject} from "../common/predicates";
-import {Node} from "../path/module";
-import {Resolvable, ResolveContext} from "../resolve/module";
-import {State} from "../state/module";
+import {bindFunctions, removeFrom, applyPairs} from "../common/common";
+import {prop} from "../common/hof";
+import {isObject, isString} from "../common/predicates";
+import {resolveFactory} from "./legacy/resolveService";
 import {trace} from "../common/trace";
-import {ng1ViewsBuilder, ng1ViewConfigFactory, Ng1ViewConfig} from "./viewsBuilder";
+import {ng1ViewsBuilder, ng1ViewConfigFactory} from "./statebuilders/views";
 import {TemplateFactory} from "./templateFactory";
-import {ng1ResolveBuilder} from "./resolvesBuilder";
+import {StateParams} from "../params/stateParams";
+import {TransitionService} from "../transition/transitionService";
+import {StateService} from "../state/stateService";
+import {StateProvider} from "../state/state";
+import {UrlRouterProvider, UrlRouter} from "../url/urlRouter";
+import {UrlMatcherFactory} from "../url/urlMatcherFactory";
+import {getStateHookBuilder} from "./statebuilders/onEnterExitRetain";
+import {ResolveContext} from "../resolve/resolveContext";
+import IInjectorService = angular.auto.IInjectorService;
 
 /** @hidden */
 let app = angular.module("ui.router.angular1", []);
@@ -159,9 +165,11 @@ function ng1UIRouter($locationProvider) {
   // Create a new instance of the Router when the ng1UIRouterProvider is initialized
   router = new UIRouter();
   
-  // Apply ng1 `views` builder to the StateBuilder
+  // Apply ng1 specific StateBuilder code for `views`, `resolve`, and `onExit/Retain/Enter` properties
   router.stateRegistry.decorator("views", ng1ViewsBuilder);
-  router.stateRegistry.decorator("resolve", ng1ResolveBuilder);
+  router.stateRegistry.decorator("onExit", getStateHookBuilder("onExit"));
+  router.stateRegistry.decorator("onRetain", getStateHookBuilder("onRetain"));
+  router.stateRegistry.decorator("onEnter", getStateHookBuilder("onEnter"));
 
   router.viewService.viewConfigFactory('ng1', ng1ViewConfigFactory);
 
@@ -202,31 +210,6 @@ function ng1UIRouter($locationProvider) {
     return router;
   }
 }
-
-const resolveFactory = () => ({
-  /**
-   * This emulates most of the behavior of the ui-router 0.2.x $resolve.resolve() service API.
-   * @param invocables an object, with keys as resolve names and values as injectable functions
-   * @param locals key/value pre-resolved data (locals)
-   * @param parent a promise for a "parent resolve"
-   */
-  resolve: (invocables, locals = {}, parent?) => {
-    let parentNode = new Node(new State(<any> { params: {} }));
-    let node = new Node(new State(<any> { params: {} }));
-    let context = new ResolveContext([parentNode, node]);
-
-    context.addResolvables(Resolvable.makeResolvables(invocables), node.state);
-
-    const resolveData = (parentLocals) => {
-      const rewrap = _locals => Resolvable.makeResolvables(<any> map(_locals, local => () => local));
-      context.addResolvables(rewrap(parentLocals), parentNode.state);
-      context.addResolvables(rewrap(locals), node.state);
-      return context.resolvePath();
-    };
-
-    return parent ? parent.then(resolveData) : resolveData({});
-  }
-});
 
 function $stateParamsFactory(ng1UIRouter) {
   return ng1UIRouter.globals.params;
@@ -272,29 +255,6 @@ angular.module('ui.router.state').factory('$stateParams', ['ng1UIRouter', (ng1UI
 
 // $transitions service and $transitionsProvider
 function getTransitionsProvider() {
-  loadAllControllerLocals.$inject = ['$transition$'];
-  function loadAllControllerLocals($transition$) {
-    const loadLocals = (vc: Ng1ViewConfig) => {
-      let node = (<Node> find($transition$.treeChanges().to, propEq('state', vc.viewDecl.$context)));
-      // Temporary fix; This whole callback should be nuked when fixing #2662
-      if (!node) return services.$q.when();
-      let resolveCtx = node.resolveContext;
-      let controllerDeps = annotateController(vc.controller);
-      let resolvables = resolveCtx.getResolvables();
-
-      function $loadControllerLocals() { }
-      $loadControllerLocals.$inject = controllerDeps.filter(dep => resolvables.hasOwnProperty(dep));
-      // Load any controller resolves that aren't already loaded
-      return resolveCtx.invokeLater($loadControllerLocals)
-          // Then provide the view config with all the resolved data
-          .then(() => vc.locals = map(resolvables, res => res.data));
-    };
-
-    let loadAllLocals = $transition$.views("entering").filter(vc => !!vc.controller).map(loadLocals);
-    return services.$q.all(loadAllLocals).then(noop);
-  }
-  router.transitionService.onFinish({}, loadAllControllerLocals);
-
   router.transitionService["$get"] = () => router.transitionService;
   return router.transitionService;
 }
@@ -316,3 +276,144 @@ export function watchDigests($rootScope) {
   $rootScope.$watch(function() { trace.approximateDigests++; });
 }
 angular.module("ui.router").run(watchDigests);
+
+export const getLocals = (ctx: ResolveContext) => {
+  let tokens = ctx.getTokens().filter(isString);
+  let tuples = tokens.map(key => [ key, ctx.getResolvable(key).data ]);
+  return tuples.reduce(applyPairs, {});
+};
+
+/** Adds the angular 1 `$injector` to the `UIInjector` interface */
+declare module "../common/interface" {
+  /**
+   * This enhances the [[common.UIInjector]] interface by adding the `$injector` service as the [[native]] injector.
+   */
+  interface UIInjector {
+    /**
+     * The native Angular 1 `$injector` service
+     *
+     * When you have access to a `UIInjector`, this property will contain the native `$injector` Angular 1 service.
+     *
+     * @example:
+     * ```js
+     *
+     * $transition.onStart({}, function(transition) {
+     *   var uiInjector = transition.injector();
+     *   var $injector = uiInjector.native;
+     *   var val = $injector.invoke(someFunction);
+     * });
+     */
+    native: IInjectorService;
+  }
+}
+
+/** Injectable services */
+
+/**
+ * An injectable service object which has the current state parameters
+ *
+ * This angular service (singleton object) holds the current state parameters.
+ * The values in `$stateParams` are not updated until *after* a [[Transition]] successfully completes.
+ *
+ * This object can be injected into other services.
+ *
+ * @example
+ * ```js
+ *
+ * SomeService.$inject = ['$http', '$stateParams'];
+ * function SomeService($http, $stateParams) {
+ *   return {
+ *     getUser: function() {
+ *       return $http.get('/api/users/' + $stateParams.username);
+ *     }
+ *   }
+ * };
+ * angular.service('SomeService', SomeService);
+ * ```
+ *
+ * ### Deprecation warning:
+ *
+ * When `$stateParams` is injected into transition hooks, resolves and view controllers, they receive a different
+ * object than this global service object.  In those cases, the injected object has the parameter values for the
+ * *pending* Transition.
+ *
+ * Because of these confusing details, this service is deprecated.
+ *
+ * @deprecated Instead of using `$stateParams, inject the current [[Transition]] as `$transition$` and use [[Transition.params]]
+ * ```js
+ * MyController.$inject = ['$transition$'];
+ * function MyController($transition$) {
+ *   var username = $transition$.params().username;
+ *   // .. do something with username
+ * }
+ * ```
+ */
+var $stateParams: StateParams;
+
+/**
+ * An injectable service primarily used to register transition hooks
+ *
+ * This angular service exposes the [[TransitionService]] singleton, which is primarily used to add transition hooks.
+ *
+ * The same object is also exposed as [[$transitionsProvider]] for injection during angular config time.
+ */
+var $transitions: TransitionService;
+
+/**
+ * A config-time injectable provider primarily used to register transition hooks
+ *
+ * This angular provider exposes the [[TransitionService]] singleton, which is primarily used to add transition hooks.
+ *
+ * The same object is also exposed as [[$transitions]] for injection at runtime.
+ */
+var $transitionsProvider: TransitionService;
+
+/**
+ * An injectable service used to query for current state information.
+ *
+ * This angular service exposes the [[StateService]] singleton.
+ */
+var $state: StateService;
+
+/**
+ * A config-time injectable provider used to register states.
+ *
+ * This angular service exposes the [[StateProvider]] singleton.
+ */
+var $stateProvider: StateProvider;
+
+/**
+ * A config-time injectable provider used to manage the URL.
+ *
+ * This angular service exposes the [[UrlRouterProvider]] singleton.
+ */
+var $urlRouterProvider: UrlRouterProvider;
+
+/**
+ * An injectable service used to configure URL redirects.
+ *
+ * This angular service exposes the [[UrlRouter]] singleton.
+ */
+var $urlRouter: UrlRouter;
+
+/**
+ * An injectable service used to configure the URL.
+ *
+ * This service is used to set url mapping options, and create [[UrlMatcher]] objects.
+ *
+ * This angular service exposes the [[UrlMatcherFactory]] singleton.
+ * The singleton is also exposed at config-time as the [[$urlMatcherFactoryProvider]].
+ */
+var $urlMatcherFactory: UrlMatcherFactory;
+
+/**
+ * An injectable service used to configure the URL.
+ * 
+ * This service is used to set url mapping options, and create [[UrlMatcher]] objects.
+ *
+ * This angular service exposes the [[UrlMatcherFactory]] singleton at config-time.
+ * The singleton is also exposed at runtime as the [[$urlMatcherFactory]].
+ */
+var $urlMatcherFactoryProvider: UrlMatcherFactory;
+
+

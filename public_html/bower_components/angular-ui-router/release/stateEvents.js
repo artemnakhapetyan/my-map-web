@@ -1,7 +1,7 @@
 /*!
  * State-based routing for AngularJS
- * @version v1.0.0-alpha.5
- * @link http://angular-ui.github.com/ui-router
+ * @version v1.0.0-beta.1
+ * @link https://ui-router.github.io
  * @license MIT License, http://www.opensource.org/licenses/MIT
  */
 (function webpackUniversalModuleDefinition(root, factory) {
@@ -186,10 +186,14 @@ return /******/ (function(modules) { // webpackBootstrap
 	        memo[key] = value;
 	        return memo;
 	    }
-	    stateChangeStartHandler.$inject = ['$transition$', '$stateEvents', '$rootScope', '$state', '$urlRouter'];
-	    function stateChangeStartHandler($transition$, $stateEvents, $rootScope, $state, $urlRouter) {
+	    function stateChangeStartHandler($transition$) {
 	        if (!$transition$.options().notify || !$transition$.valid() || $transition$.ignored())
 	            return;
+	        var $injector = $transition$.injector().native;
+	        var $stateEvents = $injector.get('$stateEvents');
+	        var $rootScope = $injector.get('$rootScope');
+	        var $state = $injector.get('$state');
+	        var $urlRouter = $injector.get('$urlRouter');
 	        var enabledEvents = $stateEvents.provider.enabled();
 	        var toParams = $transition$.params("to");
 	        var fromParams = $transition$.params("from");

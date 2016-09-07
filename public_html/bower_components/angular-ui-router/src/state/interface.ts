@@ -5,6 +5,11 @@ import {State} from "./stateObject";
 import {ViewContext} from "../view/interface";
 import {IInjectable} from "../common/common";
 import {Transition} from "../transition/transition";
+import {TransitionStateHookFn} from "../transition/interface";
+import {ResolvePolicy, ResolvableLiteral} from "../resolve/interface";
+import {Resolvable} from "../resolve/resolvable";
+import {UIInjector} from "../common/interface";
+import {TargetState} from "./targetState";
 
 export type StateOrName = (string|StateDeclaration|State);
 
@@ -12,6 +17,16 @@ export interface TransitionPromise extends Promise<State> {
   transition: Transition;
 }
 
+export interface ProviderLike {
+  provide: any,
+  useClass?: any,
+  useFactory?: Function,
+  useValue?: any,
+  useExisting?: any,
+  deps?: any[]
+}
+
+export type ResolveTypes = Resolvable | ResolvableLiteral | ProviderLike;
 /**
  * Base interface for [[Ng1ViewDeclaration]] and [[Ng2ViewDeclaration]]
  *
@@ -146,27 +161,56 @@ export interface StateDeclaration {
   $$state?: () => State;
 
   /**
-   * Resolve - a mechanism to fetch data, which participates in the transition lifecycle
+   * Resolve - a mechanism to asynchronously fetch data, participating in the Transition lifecycle
    *
-   * An object which defines dynamic dependencies/data that can then be injected into this state (or its children)
-   * during a Transition.
+   * The `resolve:` property defines data (or other dependencies) to be fetched asynchronously when the state
+   * is being entered.  After the data is fetched, it can be used in views, transition hooks or other resolves
+   * that belong to this state, or to any views or resolves that belong to nested states.
    *
-   * Define a new dependency by adding a key/value to the `resolve` property of the [[StateDeclaration]].
-   * - The key (string) is the name of the dependency.
-   * - The value (function) is an injectable function which returns the dependency, or a promise for the dependency.
+   * ### As an array
+   *
+   * Each array element should either be:
+   *
+   * - a [[ResolvableLiteral]] object (a plain old javascript object), e.g., `{ token: 'token', resolveFn: (http) => http.get('/'), deps: [ Http ] }`
+   * - a [[Resolvable]] object, e.g., `new Resolvable('token', (http) => http.get('/'), [ Http ])`
+   * - an Angular 2 style [provider literal](https://angular.io/docs/ts/latest/cookbook/dependency-injection.html#!#provide), e.g.,
+   *   `{ provide: 'token', useFactory: (http) => http.get('/'), deps: [ Http ] }`
    *
    * @example
    * ```js
    *
+   * import {Resolvable} from "ui-router-ng2"; // or "angular-ui-router"
+   * ...
+   *
+   * // ng2 example
+   * resolve: [
+   *   // If you inject `myStateDependency` into a component, you'll get "abc"
+   *   { provide: 'myStateDependency', useFactory: () => 'abc' }, // ng2 style provide literal
+   *   new Resolvable('myFoos', (http, trans) => http.get(`/foos/${trans.params().fooId}`), [Http, Transition])
+   * ]
+   * ```
+   *
+   * ### As an object
+   *
+   * - The key (string) is the name of the dependency.
+   * - The value (function) is an injectable function which returns the dependency, or a promise for the dependency.
+   *
+   * Note: You cannot specify a policy for each Resolvable, nor can you use non-string
+   * tokens when using the object style `resolve:` block.
+   *
+   * @example
+   * ```js
+   *
+   * // ng1 example
    * resolve: {
    *   // If you inject `myStateDependency` into a controller, you'll get "abc"
    *   myStateDependency: function() {
    *     return "abc";
    *   },
-   *   myAsyncData: function($http) {
+   *   myAsyncData: ['$http', '$transition$' function($http, $transition$) {
    *     // Return a promise (async) for the data
-   *     return $http.get("/api/v1/data");
-   *   }
+   *     return $http.get("/foos/" + $transition$.params().foo);
+   *   }]
    * }
    * ```
    *
@@ -187,7 +231,6 @@ export interface StateDeclaration {
    * ### Injecting resolves into other things
    *
    * During a transition, Resolve data can be injected into:
-   * - Transition Hooks, e.g., $transitions.onStart/onEnter
    * - ui-view Controllers
    * - TemplateProviders and ControllerProviders
    * - Other resolves
@@ -197,39 +240,51 @@ export interface StateDeclaration {
    * Since resolve functions are injected, a common pattern is to inject a custom service such as `UserService`
    * and delegate to a custom service method, such as `UserService.list()`;
    *
-   * A resolve function can inject some special values:
+   * #### Angular 1
+   *
+   * An Angular 1 resolve function can inject some special values:
    * - `$transition$`: The current [[Transition]] object; information and API about the current transition, such as
    *    "to" and "from" State Parameters and transition options.
    * - Other resolves: This resolve can depend on another resolve, either from the same state, or from any parent state.
    * - `$stateParams`: (deprecated) The parameters for the current state (Note: these parameter values are
    *
+   * #### Angular 2
+   *
+   * An Angular 2 resolve function can inject some special values:
+   * - `Transition`: The current [[Transition]] object; information and API about the current transition, such as
+   *    "to" and "from" State Parameters and transition options.
+   * - Other resolves: This resolve can depend on another resolve, either from the same state, or from any parent state.
+   *
    * @example
    * ```js
    *
-   * resolve: {
-   *   // Define a resolve 'allusers' which delegates to the UserService
-   *   allusers: function(UserService) {
-   *     return UserService.list(); // list() returns a promise (async) for all the users
-   *   },
+   * // Injecting a resolve into another resolve
+   * resolve: [
+   *   // Define a resolve 'allusers' which delegates to the UserService.list()
+   *   // which returns a promise (async) for all the users
+   *   { provide: 'allusers', useFactory: (UserService) => UserService.list(), deps: [UserService] },
+   *
    *   // Define a resolve 'user' which depends on the allusers resolve.
    *   // This resolve function is not called until 'allusers' is ready.
-   *   user: function(allusers, $transition$) {
-   *     return _.find(allusers, $transition$.params().userId);
-   *   }
+   *   { provide: 'user', (allusers, trans) => _.find(allusers, trans.params().userId, deps: ['allusers', Transition] }
    * }
    * ```
    */
-  resolve?: { [key: string]: IInjectable; };
+  resolve?: (ResolveTypes[] | { [key: string]: IInjectable; });
 
   /**
-   * Sets the resolve policy for the state
+   * Sets the resolve policy defaults for all resolves on this state
    *
-   * This can be either "EAGER" or "LAZY".  When "EAGER", the state's resolves are fetched before any states
-   * are entered.  When "LAZY", the resolves are fetched when the state is being entered.
-   *
-   * The default is "LAZY".
+   * This should be an [[ResolvePolicy]] object. 
+   * 
+   * It can contain the following optional keys/values:
+   * 
+   * - `when`: (optional) defines when the resolve is fetched. Accepted values: "LAZY" or "EAGER"
+   * - `async`: (optional) if the transition waits for the resolve. Accepted values: "WAIT", "NOWAIT", "RXWAIT"
+   * 
+   * See [[ResolvePolicy]] for more details.
    */
-  resolvePolicy?: (string|Object);
+  resolvePolicy?: ResolvePolicy
 
   /**
    * The url fragment for the state
@@ -335,18 +390,136 @@ export interface StateDeclaration {
   /**
    * An inherited property to store state data
    *
-   * This is a spot for you to store inherited state metadata.  Child states' `data` object will
-   * prototypically inherit from the parent state .
+   * This is a spot for you to store inherited state metadata.
+   * Child states' `data` object will prototypally inherit from their parent state.
    *
    * This is a good spot to put metadata such as `requiresAuth`.
+   *
+   * Note: because prototypal inheritance is used, changes to parent `data` objects reflect in the child `data` objects.
+   * Care should be taken if you are using `hasOwnProperty` on the `data` object.
+   * Properties from parent objects will return false for `hasOwnProperty`.
    */
   data?: any;
-  /**  A Transition Hook called with the state is being entered.  See: [[IHookRegistry.onEnter]]*/
-  onEnter?: Function;
-  /**  A Transition Hook called with the state is being retained. See: [[IHookRegistry.onRetain]] */
-  onRetain?: Function;
-  /**  A Transition Hook called with the state is being exited. See: [[IHookRegistry.onExit]] */
-  onExit?: Function;
+
+  /**
+   * Synchronously or asynchronously redirects Transitions to a different state/params
+   *
+   * If this property is defined, a Transition directly to this state will be redirected based on the property's value.
+   *
+   * - If the value is a `string`, the Transition is redirected to the state named by the string.
+   *
+   * - If the property is an object with a `state` and/or `params` property,
+   *   the Transition is redirected to the named `state` and/or `params`.
+   *
+   * - If the value is a [[TargetState]] the Transition is redirected to the `TargetState`
+   *
+   * - If the property is a function:
+   *   - The function is called with two parameters:
+   *     - The current [[Transition]]
+   *     - An injector which can be used to get dependencies using [[UIRInjector.get]]
+   *   - The return value is processed using the previously mentioned rules.
+   *   - If the return value is a promise, the promise is waited for, then the resolved async value is processed using the same rules.
+   *
+   * @example
+   * ```js
+   *
+   * // a string
+   * .state('A', {
+   *   redirectTo: 'A.B'
+   * })
+   * // a {state, params} object
+   * .state('C', {
+   *   redirectTo: { state: 'C.D', params: { foo: 'index' } }
+   * })
+   * // a fn
+   * .state('E', {
+   *   redirectTo: () => "A"
+   * })
+   * // a fn conditionally returning a {state, params}
+   * .state('F', {
+   *   redirectTo: (trans) => {
+   *     if (trans.params().foo < 10)
+   *       return { state: 'F', params: { foo: 10 } };
+   *   }
+   * })
+   * // a fn returning a promise for a redirect
+   * .state('G', {
+   *   redirectTo: (trans) => {
+   *     let svc = trans.injector().get('SomeAsyncService')
+   *     let promise = svc.getAsyncRedirectTo(trans.params.foo);
+   *     return promise;
+   *   }
+   * })
+   */
+  redirectTo?: (
+      ($transition$: Transition) => TargetState |
+      { state: (string|StateDeclaration), params: { [key: string]: any }} |
+      string
+  )
+
+  /**
+   * A Transition Hook called with the state is being entered.  See: [[IHookRegistry.onEnter]]
+   *
+   * @example
+   * ```js
+   *
+   * .state({
+   *   name: 'mystate',
+   *   onEnter: function(trans, state) {
+   *     console.log("Entering " + state.name);
+   *   }
+   * });
+   * ```
+   *
+   * Note: The above `onEnter` on the state declaration is effectively sugar for:
+   * ```
+   * transitionService.onEnter({ entering: 'mystate' }, function(trans, state) {
+   *   console.log("Entering " + state.name);
+   * });
+   */
+  onEnter?: TransitionStateHookFn;
+  /**
+   * A [[TransitionStateHookFn]] called with the state is being retained/kept. See: [[IHookRegistry.onRetain]]
+   *
+   * @example
+   * ```js
+   *
+   * .state({
+   *   name: 'mystate',
+   *   onRetain: function(trans, state) {
+   *     console.log(state.name + " is still active!");
+   *   }
+   * });
+   * ```
+   *
+   * Note: The above `onRetain` on the state declaration is effectively sugar for:
+   * ```
+   * transitionService.onRetain({ retained: 'mystate' }, function(trans, state) {
+   *   console.log(state.name + " is still active!");
+   * });
+   */
+  onRetain?: TransitionStateHookFn;
+  /**
+   * A Transition Hook called with the state is being exited. See: [[IHookRegistry.onExit]]
+   *
+   * @example
+   * ```js
+   *
+   * .state({
+   *   name: 'mystate',
+   *   onExit: function(trans, state) {
+   *     console.log("Leaving " + state.name);
+   *   }
+   * });
+   * ```
+   *
+   * Note: The above `onRetain` on the state declaration is effectively sugar for:
+   * ```
+   * transitionService.onExit({ exiting: 'mystate' }, function(trans, state) {
+   *   console.log("Leaving " + state.name);
+   * });
+   */
+  onExit?: TransitionStateHookFn;
 
   /**
    * @deprecated define individual parameters as [[ParamDeclaration.dynamic]]

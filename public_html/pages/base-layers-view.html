@@ -1,0 +1,27 @@
+<!-- base layers switch panel -->
+<!--ng-show="baseLayersSwitchPanelVisible && viewportType === 'map'" 
+      ng-style="{'bottom': '{0}px'.format(footerPanelHeight+135), 'left': '{0}px'.format(leftPanelWidth+15)};"-->
+<div  class="map-el map-base-layers-switch" style="bottom: 100px;"
+      ng-show="baseLayersSwitchPanelVisible" 
+      >
+
+    <!-- ng-if="!baseLayer.checked"
+         ng-click="changeBaseLayer(baseLayer)" -->
+    <img ng-repeat="baseLayer in baseLayers track by baseLayer.lrId" 
+         class="map-base-layers-img"
+         ng-show="!baseLayer.data.isSelected"
+         ng-click="changeBaseLayer(baseLayer)"
+         ng-src="{{baseLayer.baseLayerImage}}"/>
+    
+</div>
+
+<!-- base layers panel -->
+<!--
+    ng-show="viewportType === 'map'"
+    ng-style="{'bottom': '{0}px'.format(footerPanelHeight+33), 'left': '{0}px'.format(leftPanelWidth+15)}">
+    ng-click="showBaseLayersSwitchPanel()" 
+-->
+<div class="map-el-1 map-base-layers" style="bottom: 0px"
+     ng-click="showHideBaseLayersSwitchPanel();">
+    <img class="map-base-layers-choosed-img" ng-src="{{baseLayerImage}}"/>
+</div>

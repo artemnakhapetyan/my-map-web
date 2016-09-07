@@ -1,0 +1,43 @@
+
+    
+    <!-- letters list -->
+    <md-content layout="column" flex>
+
+        <md-toolbar class="ux-low-toolbar md-primary md-hue-1" ng-show="layers4Edit.length">
+            <div class="md-toolbar-tools">
+                <span class="bpg-mrgvlovani-caps">&nbsp;Layers</span>
+                </div>
+        </md-toolbar>
+        
+        <md-list>
+            <md-list-item
+                class="letters-list-item md-1-line md-clickable" ng-repeat="layer in layers4Edit"
+                md-ink-ripple
+                ng-style="{'background-color' : layer.isSelected? '#eee': 'none'}"
+                >
+
+                <div class="md-list-item-text" layout="row" style="width: 100%;">
+
+                    <md-checkbox ng-checked="layer.isSelected"
+                                 ng-click="changeLayerVisibility(layer);"
+                                 aria-label="Checkbox 1" style="margin-bottom: 0px;"></md-checkbox>
+                    
+                    <md-icon md-font-set="material-icons" class="ng-scope ng-isolate-scope material-icons letters-list-select-icon">
+                        layers
+                    </md-icon>
+
+                    <div layout="column" flex>
+                        <p>{{ layer.name}}</p>
+                    </div>
+                    
+                    <!--<md-icon md-font-set="material-icons" class="ng-scope ng-isolate-scope material-icons letters-list-select-icon"
+                             ng-click="showAddLayerObjectForm(layer); $event.stopPropagation();">
+                        add
+                    </md-icon>-->
+                    
+                </div>
+            </md-list-item>
+        </md-list>
+    </md-content>
+    
+    
