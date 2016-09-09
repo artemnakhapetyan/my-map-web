@@ -10,7 +10,7 @@ myMapApp.factory('mapService', function ($http, $mdDialog, $location, mapUtils, 
                 units: "degrees",
                 transitionEffect: null,
                 zoomMethod: null,
-                //zoomDuration: 0,
+                zoomDuration: 10,
                 controls: [
                     /*new OpenLayers.Control.LoadingPanel({
                      displayClass: 'olControlLoadingPanel1'
@@ -847,8 +847,14 @@ myMapApp.factory('mapService', function ($http, $mdDialog, $location, mapUtils, 
             var me = this;
 
             var layers = me.map.getLayersBy("lrId", lrId);
+            
+            console.log(layers);
 
-            layers[0].refresh({force: true});
+            if(layers[0].refresh){
+                layers[0].refresh({force: true});
+            }
+            
+            layers[0].redraw(true);
 
         }
 
